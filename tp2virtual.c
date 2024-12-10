@@ -161,6 +161,7 @@ int find_page_in_memory(int page_number) {
 
 void handle_page_fault(int page_number, char rw) {
     int victim_frame = select_victim_frame();
+
     if (physical_memory[victim_frame].valid) {
     page_table[physical_memory[victim_frame].page_number].valid = FALSE;
 }
@@ -188,15 +189,30 @@ int select_victim_frame() {
         next_frame = (next_frame + 1) % num_frames;
         return victim;
     } else if (strcmp(replacement_policy, "lru") == 0) {
-        unsigned long oldest_time = access_count + 1;
+        unsigned long oldest_time = ~0UL; // Maior valor possível para comparar corretamente.
         int victim = -1;
+
         for (unsigned i = 0; i < num_frames; i++) {
-            if (physical_memory[i].valid && page_table[physical_memory[i].page_number].last_access_time < oldest_time) {
-                oldest_time = page_table[physical_memory[i].page_number].last_access_time;
-                victim = i;
+            if (!physical_memory[i].valid) {
+                return i; // Retorna imediatamente o primeiro quadro livre encontrado.
             }
         }
+
+        // Itera sobre todos os quadros para encontrar o menos recentemente usado.
+        for (unsigned i = 0; i < num_frames; i++) {
+            if (physical_memory[i].valid) { // Apenas considera quadros válidos.
+                unsigned page_number = physical_memory[i].page_number;
+                unsigned long last_access = page_table[page_number].last_access_time;
+
+                if (last_access < oldest_time) {
+                    oldest_time = last_access;
+                    victim = i;
+                }
+            }
+        }
+
         return victim;
+        
     } else if (strcmp(replacement_policy, "2a") == 0) {
     static int pointer = 0; // Ponteiro circular
     while (TRUE) {
