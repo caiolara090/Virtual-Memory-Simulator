@@ -17,22 +17,22 @@ typedef struct PageTableEntry {
     unsigned timestamp; // Timestamp para algoritmos como LRU
 } PageTableEntry;
 
-// Estrutura para representar a tabela de páginas hierárquica
+// Estrutura para representar uma tabela de páginas em um nível
 typedef struct PageTableLevel {
-    PageTableEntry **entries; // Ponteiro para entradas
-    unsigned size;            // Número de entradas neste nível
+    void **entries;     // Ponteiro para entradas ou ponteiros para o próximo nível
+    unsigned size;      // Número de entradas neste nível
 } PageTableLevel;
 
 // Variáveis globais
-unsigned page_offset_bits;      // Bits do offset da página
-unsigned level1_bits, level2_bits; // Bits para os níveis 1 e 2 da tabela
-PageTableLevel *level1_table;  // Ponteiro para o nível 1 da tabela
-unsigned memory_size_kb;       // Tamanho da memória física (em KB)
-unsigned page_size_kb;         // Tamanho das páginas (em KB)
-char replacement_policy[10];   // Política de substituição ("lru", "fifo", etc.)
-long unsigned total_accesses = 0;   // Total de acessos
-long unsigned page_faults = 0;      // Total de page faults
-unsigned pages_written = 0;    // Total de páginas escritas (sujas)
+unsigned page_offset_bits;         // Bits do offset da página
+unsigned level1_bits, level2_bits, level3_bits; // Bits para os níveis 1, 2 e 3
+PageTableLevel *level1_table;      // Ponteiro para o nível 1 da tabela
+unsigned memory_size_kb;           // Tamanho da memória física (em KB)
+unsigned page_size_kb;             // Tamanho das páginas (em KB)
+char replacement_policy[10];       // Política de substituição ("lru", "fifo", etc.)
+long unsigned total_accesses = 0;       // Total de acessos
+long unsigned page_faults = 0;          // Total de page faults
+long unsigned pages_written = 0;        // Total de páginas escritas (sujas)
 
 // Estrutura para representar os quadros de memória
 typedef struct Frame {
@@ -59,14 +59,14 @@ unsigned calculate_offset_bits(unsigned page_size_kb) {
 }
 
 unsigned calculate_level_bits(unsigned total_bits, unsigned offset_bits) {
-    return (total_bits - offset_bits) / 2;
+    return (total_bits - offset_bits) / 3;
 }
 
 void initialize_page_table() {
     // Inicializar tabela de nível 1
     level1_table = (PageTableLevel *)malloc(sizeof(PageTableLevel));
     level1_table->size = (1 << level1_bits);
-    level1_table->entries = (PageTableEntry **)calloc(level1_table->size, sizeof(PageTableEntry *));
+    level1_table->entries = (void **)calloc(level1_table->size, sizeof(void *));
 
     // Inicializar tabela invertida
     num_frames = memory_size_kb / page_size_kb;
@@ -75,15 +75,26 @@ void initialize_page_table() {
 
 PageTableEntry *get_or_create_page_entry(unsigned virtual_address) {
     // Calcular índices nos níveis
-    unsigned level1_index = (virtual_address >> (level2_bits + page_offset_bits)) & ((1 << level1_bits) - 1);
-    unsigned level2_index = (virtual_address >> page_offset_bits) & ((1 << level2_bits) - 1);
+    unsigned level1_index = (virtual_address >> (level2_bits + level3_bits + page_offset_bits)) & ((1 << level1_bits) - 1);
+    unsigned level2_index = (virtual_address >> (level3_bits + page_offset_bits)) & ((1 << level2_bits) - 1);
+    unsigned level3_index = (virtual_address >> page_offset_bits) & ((1 << level3_bits) - 1);
 
     // Acessar/Inicializar nível 2
     if (level1_table->entries[level1_index] == NULL) {
-        level1_table->entries[level1_index] = (PageTableEntry *)calloc((1 << level2_bits), sizeof(PageTableEntry));
+        level1_table->entries[level1_index] = (PageTableLevel *)malloc(sizeof(PageTableLevel));
+        PageTableLevel *level2_table = (PageTableLevel *)level1_table->entries[level1_index];
+        level2_table->size = (1 << level2_bits);
+        level2_table->entries = (void **)calloc(level2_table->size, sizeof(void *));
     }
+    PageTableLevel *level2_table = (PageTableLevel *)level1_table->entries[level1_index];
 
-    return &level1_table->entries[level1_index][level2_index];
+    // Acessar/Inicializar nível 3
+    if (level2_table->entries[level2_index] == NULL) {
+        level2_table->entries[level2_index] = (PageTableEntry *)calloc((1 << level3_bits), sizeof(PageTableEntry));
+    }
+    PageTableEntry *level3_table = (PageTableEntry *)level2_table->entries[level2_index];
+
+    return &level3_table[level3_index];
 }
 
 int choose_frame_to_replace() {
@@ -172,7 +183,6 @@ void process_memory_access(FILE *file) {
     }
 }
 
-// Função principal
 int main(int argc, char *argv[]) {
     if (argc != 5) {
         fprintf(stderr, "Uso: %s <politica> <arquivo.log> <tamanho_pagina_kb> <tamanho_memoria_kb>\n", argv[0]);
@@ -207,7 +217,7 @@ int main(int argc, char *argv[]) {
     printf("Tamanho das paginas: %u KB\n", page_size_kb);
     printf("Tecnica de reposicao: %s\n", replacement_policy);
     printf("Paginas lidas: %lu\n", page_faults);
-    printf("Paginas escritas: %u\n", pages_written);
+    printf("Paginas escritas: %lu\n", pages_written);
     printf("Total de acessos à memória: %lu\n", total_accesses);
 
     return 0;
