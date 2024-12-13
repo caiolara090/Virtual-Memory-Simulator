@@ -234,6 +234,7 @@ int main(int argc, char *argv[]) {
     fclose(file);
 
     // Relatório final
+    printf("Executando o simulador...\n");
     printf("Arquivo de entrada: %s\n", log_file);
     printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
     printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);

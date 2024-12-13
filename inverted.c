@@ -80,7 +80,6 @@ void process_memory_access(FILE *file) {
     unsigned addr;
     char rw;
     unsigned s = 0, tmp = page_size;
-    printf("Page size = %d\n", page_size);
     // Calcular o número de bits para o deslocamento (s)
     while (tmp > 1) {
         tmp >>= 1;
@@ -175,6 +174,7 @@ int choose_frame_to_replace() {
 }
 
 void print_report(const char *input_file) {
+    printf("Executando o simulador...\n");
     printf("Arquivo de entrada: %s\n", input_file);
     printf("Tamanho da memoria: %u KB\n", mem_size / 1024);
     printf("Tamanho das paginas: %u KB\n", page_size / 1024);
