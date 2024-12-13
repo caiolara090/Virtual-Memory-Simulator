@@ -49,7 +49,7 @@ unsigned current_time = 0; // Contador global de tempo para LRU
 
 // Funções auxiliares
 unsigned calculate_offset_bits(unsigned page_size_kb) {
-    unsigned tmp = page_size_kb * 1024; // Tamanho da página em bytes
+    unsigned tmp = page_size_kb; // Tamanho da página em bytes
     unsigned s = 0;
     while (tmp > 1) {
         tmp >>= 1;
@@ -75,9 +75,9 @@ void initialize_page_table() {
 
 PageTableEntry *get_or_create_page_entry(unsigned virtual_address) {
     // Calcular índices nos níveis
-    unsigned level1_index = (virtual_address >> (level2_bits + level3_bits + page_offset_bits)) & ((1 << level1_bits) - 1);
-    unsigned level2_index = (virtual_address >> (level3_bits + page_offset_bits)) & ((1 << level2_bits) - 1);
-    unsigned level3_index = (virtual_address >> page_offset_bits) & ((1 << level3_bits) - 1);
+    unsigned level1_index = (virtual_address >> (level2_bits + level3_bits)) & ((1 << level1_bits) - 1);
+    unsigned level2_index = (virtual_address >> level3_bits) & ((1 << level2_bits) - 1);
+    unsigned level3_index = virtual_address & ((1 << level3_bits) - 1);
 
     // Acessar/Inicializar nível 2
     if (level1_table->entries[level1_index] == NULL) {
@@ -140,13 +140,19 @@ void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
     // Escolher quadro para substituir
     int frame_to_replace = choose_frame_to_replace();
 
+    if (physical_memory[frame_to_replace].valid) {
+        unsigned old_virtual_page = physical_memory[frame_to_replace].page_number;
+        PageTableEntry *old_entry = get_or_create_page_entry(old_virtual_page);
+        old_entry->valid = 0;
+    }
+
     // Se o quadro a ser substituído está modificado, conte como "escrita"
     if (physical_memory[frame_to_replace].valid && physical_memory[frame_to_replace].modified) {
         pages_written++;
     }
 
     // Atualizar tabela invertida
-    physical_memory[frame_to_replace].page_number = virtual_address >> page_offset_bits;
+    physical_memory[frame_to_replace].page_number = virtual_address;
     physical_memory[frame_to_replace].valid = 1;
     physical_memory[frame_to_replace].modified = 0;
     physical_memory[frame_to_replace].referenced = 1;
@@ -157,15 +163,32 @@ void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
     entry->valid = 1;
 }
 
+void print_inverted_table() {
+    printf("Tabela Invertida:\n");
+    printf("-------------------------------------------------\n");
+    printf("| Quadro | Página Virtual | Suja | Referenciada |\n");
+    printf("-------------------------------------------------\n");
+    for (unsigned i = 0; i < num_frames; i++) {
+        printf("| %-6u | %-14d | %-4d | %-12d |\n",
+               i,
+               physical_memory[i].page_number,
+               physical_memory[i].modified,
+               physical_memory[i].referenced);
+    }
+    printf("-------------------------------------------------\n");
+}
+
 // Processamento do arquivo de entrada
 void process_memory_access(FILE *file) {
     unsigned address;
     char access_type;
 
     while (fscanf(file, "%x %c", &address, &access_type) != EOF) {
+
+        address = address >> page_offset_bits;
         total_accesses++;
         current_time++;
-
+        //print_inverted_table();
         PageTableEntry *entry = get_or_create_page_entry(address);
         if (!entry->valid) {
             // Page fault
@@ -192,12 +215,13 @@ int main(int argc, char *argv[]) {
     // Configurações iniciais
     strncpy(replacement_policy, argv[1], sizeof(replacement_policy));
     const char *log_file = argv[2];
-    page_size_kb = atoi(argv[3]);
-    memory_size_kb = atoi(argv[4]);
+    page_size_kb = atoi(argv[3]) * 1024;
+    memory_size_kb = atoi(argv[4]) * 1024;
 
     page_offset_bits = calculate_offset_bits(page_size_kb);
     level1_bits = calculate_level_bits(MAX_ADDRESS_BITS, page_offset_bits);
-    level2_bits = MAX_ADDRESS_BITS - page_offset_bits - level1_bits;
+    level2_bits = calculate_level_bits(MAX_ADDRESS_BITS, page_offset_bits);
+    level3_bits = MAX_ADDRESS_BITS - page_offset_bits - level1_bits - level2_bits;
 
     initialize_page_table();
 
@@ -213,8 +237,8 @@ int main(int argc, char *argv[]) {
 
     // Relatório final
     printf("Arquivo de entrada: %s\n", log_file);
-    printf("Tamanho da memoria: %u KB\n", memory_size_kb);
-    printf("Tamanho das paginas: %u KB\n", page_size_kb);
+    printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
+    printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
     printf("Tecnica de reposicao: %s\n", replacement_policy);
     printf("Paginas lidas: %lu\n", page_faults);
     printf("Paginas escritas: %lu\n", pages_written);
