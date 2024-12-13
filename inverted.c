@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
 
     // Fechar o arquivo e liberar memória
     fclose(file);
-    print_report();
+    print_report(argv[2]);
     free(inverted_table);
 
     return 0;
@@ -174,8 +174,8 @@ int choose_frame_to_replace() {
     return 0;
 }
 
-void print_report() {
-    printf("Arquivo de entrada: arquivo.log\n");
+void print_report(const char *input_file) {
+    printf("Arquivo de entrada: %s\n", input_file);
     printf("Tamanho da memoria: %u KB\n", mem_size / 1024);
     printf("Tamanho das paginas: %u KB\n", page_size / 1024);
     printf("Tecnica de reposicao: %s\n", replacement_algo);
