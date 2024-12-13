@@ -36,8 +36,8 @@ int main(int argc, char *argv[]) {
 
     // Configurar os parâmetros do simulador
     strncpy(replacement_algo, argv[1], sizeof(replacement_algo) - 1);
-    page_size = atoi(argv[3]);
-    mem_size = atoi(argv[4]);
+    page_size = atoi(argv[3]) * 1024;
+    mem_size = atoi(argv[4]) * 1024;
     num_frames = mem_size / page_size;
 
     // Inicializar tabela invertida
@@ -80,10 +80,10 @@ void process_memory_access(FILE *file) {
     unsigned addr;
     char rw;
     unsigned s = 0, tmp = page_size;
-
+    printf("Page size = %d\n", page_size);
     // Calcular o número de bits para o deslocamento (s)
     while (tmp > 1) {
-        tmp = tmp >> 1;
+        tmp >>= 1;
         s++;
     }
 
@@ -126,6 +126,13 @@ int find_page(unsigned virtual_page) {
 }
 
 int choose_frame_to_replace() {
+
+    for (unsigned i = 0; i < num_frames; i++) {
+        if (inverted_table[i].virtual_page == -1) {
+            return i; // Retornar o índice do quadro vazio
+        }
+    }
+
     // Implementar os algoritmos de substituição de página
     if (strcmp(replacement_algo, "lru") == 0) {
         unsigned lru_frame = 0;
@@ -169,8 +176,8 @@ int choose_frame_to_replace() {
 
 void print_report() {
     printf("Arquivo de entrada: arquivo.log\n");
-    printf("Tamanho da memoria: %u KB\n", mem_size);
-    printf("Tamanho das paginas: %u KB\n", page_size);
+    printf("Tamanho da memoria: %u KB\n", mem_size / 1024);
+    printf("Tamanho das paginas: %u KB\n", page_size / 1024);
     printf("Tecnica de reposicao: %s\n", replacement_algo);
     printf("Paginas lidas: %u\n", page_faults);
     printf("Paginas escritas: %u\n", dirty_pages_written);
