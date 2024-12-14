@@ -3,53 +3,53 @@
 #include <string.h>
 #include <math.h>
 
-// Definições de constantes
+// Constantes globais
 #define MAX_ADDRESS_BITS 32
 #define READ 'R'
 #define WRITE 'W'
 
-// Estrutura para representar uma entrada na tabela de páginas
+// Estruturas de dados
 typedef struct PageTableEntry {
-    int frame;          // Quadro físico associado (se presente)
-    int valid;          // Bit de validade
-    int modified;       // Bit de modificação
-    int referenced;     // Bit de referência
-    unsigned timestamp; // Timestamp para algoritmos como LRU
+    int frame;          
+    int valid;         
+    int modified;       
+    int referenced;    
+    unsigned timestamp;
 } PageTableEntry;
 
-// Estrutura para representar uma tabela de páginas em um nível
+
 typedef struct PageTableLevel {
-    void **entries;     // Ponteiro para entradas ou ponteiros para o próximo nível
-    unsigned size;      // Número de entradas neste nível
+    void **entries;
+    unsigned size;
 } PageTableLevel;
 
 // Variáveis globais
-unsigned page_offset_bits;         // Bits do offset da página
-unsigned level1_bits, level2_bits, level3_bits; // Bits para os níveis 1, 2 e 3
-PageTableLevel *level1_table;      // Ponteiro para o nível 1 da tabela
-unsigned memory_size_kb;           // Tamanho da memória física (em KB)
-unsigned page_size_kb;             // Tamanho das páginas (em KB)
-char replacement_policy[10];       // Política de substituição ("lru", "fifo", etc.)
-long unsigned total_accesses = 0;       // Total de acessos
-long unsigned page_faults = 0;          // Total de page faults
-long unsigned pages_written = 0;        // Total de páginas escritas (sujas)
+unsigned page_offset_bits;        
+unsigned level1_bits, level2_bits, level3_bits;
+PageTableLevel *level1_table;   
+unsigned memory_size_kb;          
+unsigned page_size_kb;             
+char replacement_policy[10];     
+long unsigned total_accesses = 0;    
+long unsigned page_faults = 0;          
+long unsigned pages_written = 0;     
 
 // Estrutura para representar os quadros de memória
 typedef struct Frame {
-    int page_number;  // Número da página alocada no quadro
-    int valid;        // Se o quadro está válido
-    int modified;     // Se o quadro está modificado
-    int referenced;   // Bit de referência para segunda chance
-    unsigned last_access; // Timestamp para LRU
+    int page_number;
+    int valid;       
+    int modified;   
+    int referenced;   
+    unsigned last_access;
 } Frame;
 
-Frame *physical_memory; // Tabela invertida de quadros de memória
-unsigned num_frames;   // Número de quadros na memória
-unsigned current_time = 0; // Contador global de tempo para LRU
+Frame *physical_memory;
+unsigned num_frames;
+unsigned current_time = 0;
 
 // Funções auxiliares
 unsigned calculate_offset_bits(unsigned page_size_kb) {
-    unsigned tmp = page_size_kb; // Tamanho da página em bytes
+    unsigned tmp = page_size_kb;
     unsigned s = 0;
     while (tmp > 1) {
         tmp >>= 1;
@@ -58,28 +58,28 @@ unsigned calculate_offset_bits(unsigned page_size_kb) {
     return s;
 }
 
+// Calcula os bits de offset para 3 hierarquias
 unsigned calculate_level_bits(unsigned total_bits, unsigned offset_bits) {
     return (total_bits - offset_bits) / 3;
 }
 
+// Inicializar a memória física e tabela de páginas
 void initialize_page_table() {
-    // Inicializar tabela de nível 1
+
     level1_table = (PageTableLevel *)malloc(sizeof(PageTableLevel));
     level1_table->size = (1 << level1_bits);
     level1_table->entries = (void **)calloc(level1_table->size, sizeof(void *));
 
-    // Inicializar tabela invertida
     num_frames = memory_size_kb / page_size_kb;
     physical_memory = (Frame *)calloc(num_frames, sizeof(Frame));
 }
 
 PageTableEntry *get_or_create_page_entry(unsigned virtual_address) {
-    // Calcular índices nos níveis
+
     unsigned level1_index = (virtual_address >> (level2_bits + level3_bits)) & ((1 << level1_bits) - 1);
     unsigned level2_index = (virtual_address >> level3_bits) & ((1 << level2_bits) - 1);
     unsigned level3_index = virtual_address & ((1 << level3_bits) - 1);
 
-    // Acessar/Inicializar nível 2
     if (level1_table->entries[level1_index] == NULL) {
         level1_table->entries[level1_index] = (PageTableLevel *)malloc(sizeof(PageTableLevel));
         PageTableLevel *level2_table = (PageTableLevel *)level1_table->entries[level1_index];
@@ -88,7 +88,6 @@ PageTableEntry *get_or_create_page_entry(unsigned virtual_address) {
     }
     PageTableLevel *level2_table = (PageTableLevel *)level1_table->entries[level1_index];
 
-    // Acessar/Inicializar nível 3
     if (level2_table->entries[level2_index] == NULL) {
         level2_table->entries[level2_index] = (PageTableEntry *)calloc((1 << level3_bits), sizeof(PageTableEntry));
     }
@@ -97,6 +96,7 @@ PageTableEntry *get_or_create_page_entry(unsigned virtual_address) {
     return &level3_table[level3_index];
 }
 
+// Algoritmos de seleção de página a ser retirada da memória
 int choose_frame_to_replace() {
     if (strcmp(replacement_policy, "lru") == 0) {
         unsigned lru_frame = 0;
@@ -116,16 +116,14 @@ int choose_frame_to_replace() {
     } else if (strcmp(replacement_policy, "random") == 0) {
         return rand() % num_frames;
     } else if (strcmp(replacement_policy, "2a") == 0) {
-        static int pointer = 0; // Ponteiro circular
+        static int pointer = 0;
         while (1) {
             int victim = pointer;
             pointer = (pointer + 1) % num_frames;
 
-            // Verificar o bit de referência
             if (physical_memory[victim].referenced == 0) {
-                return victim; // Página sem segunda chance, substitua
+                return victim;
             } else {
-                // Dar segunda chance e resetar o bit de referência
                 physical_memory[victim].referenced = 0;
             }
         }
@@ -136,8 +134,9 @@ int choose_frame_to_replace() {
     return 0;
 }
 
+//Lida com a falta de uma página na memória
 void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
-    // Escolher quadro para substituir
+
     int frame_to_replace = choose_frame_to_replace();
 
     if (physical_memory[frame_to_replace].valid) {
@@ -146,19 +145,14 @@ void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
         old_entry->valid = 0;
     }
 
-    // Se o quadro a ser substituído está modificado, conte como "escrita"
     if (physical_memory[frame_to_replace].valid && physical_memory[frame_to_replace].modified) {
         pages_written++;
     }
 
-    // Atualizar tabela invertida
     physical_memory[frame_to_replace].page_number = virtual_address;
     physical_memory[frame_to_replace].valid = 1;
     physical_memory[frame_to_replace].modified = 0;
-    // physical_memory[frame_to_replace].referenced = 1;
-    // physical_memory[frame_to_replace].last_access = current_time;
 
-    // Atualizar entrada da tabela de páginas
     entry->frame = frame_to_replace;
     entry->valid = 1;
 }
@@ -188,10 +182,10 @@ void process_memory_access(FILE *file) {
         address = address >> page_offset_bits;
         total_accesses++;
         current_time++;
-        //print_inverted_table();
+
         PageTableEntry *entry = get_or_create_page_entry(address);
         if (!entry->valid) {
-            // Page fault
+
             page_faults++;
             handle_page_fault(entry, address);
         } else {
@@ -201,7 +195,6 @@ void process_memory_access(FILE *file) {
         frame->last_access = current_time;
         }
 
-        // Atualizar bits de controle
         Frame *frame = &physical_memory[entry->frame];
         if (access_type == WRITE) {
             frame->modified = 1;
@@ -209,6 +202,7 @@ void process_memory_access(FILE *file) {
     }
 }
 
+// Função para calcular o tamanho da tabela - usada nos testes e no relatório
 void calculate_table_size() {
     unsigned total_entries_level1_used = 0;
     unsigned total_entries_level2_used = 0;
@@ -248,14 +242,13 @@ void calculate_table_size() {
     printf("Memória gasta = %d KB\n", memory_used_kb);
 }
 
-
+// Função principal
 int main(int argc, char *argv[]) {
     if (argc != 5) {
         fprintf(stderr, "Uso: %s <politica> <arquivo.log> <tamanho_pagina_kb> <tamanho_memoria_kb>\n", argv[0]);
         return 1;
     }
 
-    // Configurações iniciais
     strncpy(replacement_policy, argv[1], sizeof(replacement_policy));
     const char *log_file = argv[2];
     page_size_kb = atoi(argv[3]) * 1024;
@@ -268,7 +261,6 @@ int main(int argc, char *argv[]) {
 
     initialize_page_table();
 
-    // Processar o arquivo de log
     FILE *file = fopen(log_file, "r");
     if (!file) {
         perror("Erro ao abrir arquivo de log");
@@ -277,16 +269,18 @@ int main(int argc, char *argv[]) {
 
     process_memory_access(file);
     fclose(file);
-    calculate_table_size();
-    // Relatório final
-    // printf("Executando o simulador...\n");
-    // printf("Arquivo de entrada: %s\n", log_file);
-    // printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
-    // printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
-    // printf("Tecnica de reposicao: %s\n", replacement_policy);
+
+    //calculate_table_size();
+    //Relatório final
+    
+    printf("Executando o simulador...\n");
+    printf("Arquivo de entrada: %s\n", log_file);
+    printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
+    printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
+    printf("Tecnica de reposicao: %s\n", replacement_policy);
     printf("Paginas lidas: %lu\n", page_faults);
     printf("Paginas escritas: %lu\n", pages_written);
-    // printf("Total de acessos à memória: %lu\n", total_accesses);
+    printf("Total de acessos à memória: %lu\n", total_accesses);
 
     return 0;
 }

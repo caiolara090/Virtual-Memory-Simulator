@@ -4,10 +4,12 @@
 #include <math.h>
 #include <sys/time.h>
 
+// Esse código é o programa principal, que direciona a execução de acordo com os parâmetros passados pelo usuário
+// Veja que ele chama os outros programas como se o usuário fizesse uma chamada pela linha de comando
 int main(int argc, char *argv[]) {
 
-    struct timeval start, end;
-    gettimeofday(&start, NULL);
+    // struct timeval start, end;
+    // gettimeofday(&start, NULL);
 
     if (argc != 6) {
         fprintf(stderr, "Uso: tp2virtual <algoritmo> <arquivo.log> <tamanho_pagina_kb> <memoria_kb> <tipo_tabela>\n\nAs tabelas podem ser do tipo: dense, doisNiveis, tresNiveis ou inverted\n");
@@ -57,14 +59,14 @@ int main(int argc, char *argv[]) {
         printf("Escolha uma tabela da lista: dense, doisNiveis, tresNiveis ou inverted\n\t\t\t : ( \n");
     }
 
-    printf("%s %s %s %s %s\n", arg1, table_type, arg2, arg3, arg4);
+    // printf("%s %s %s %s %s\n", arg1, table_type, arg2, arg3, arg4);
     system(command);
 
-    gettimeofday(&end, NULL);
-    long seconds = end.tv_sec - start.tv_sec;
-    long microseconds = end.tv_usec - start.tv_usec;
-    long total_time = seconds * 1000000 + microseconds;
-    printf("Tempo decorrido: %lf milisegundos\n\n", total_time/1000.0);
+    // gettimeofday(&end, NULL);
+    // long seconds = end.tv_sec - start.tv_sec;
+    // long microseconds = end.tv_usec - start.tv_usec;
+    // long total_time = seconds * 1000000 + microseconds;
+    // printf("Tempo decorrido: %lf milisegundos\n\n", total_time/1000.0);
 
     return 0;
 }

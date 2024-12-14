@@ -5,7 +5,7 @@
 #include <time.h>
 
 // Constantes globais
-#define MAX_PAGE_TABLE_SIZE (1 << 21) // Máximo número de páginas (para páginas de 2 KB)
+#define MAX_PAGE_TABLE_SIZE (1 << 21) // Máximo número de páginas (para páginas >= 2 KB e endereços de 32 bits)
 #define TRUE 1
 #define FALSE 0
 
@@ -148,7 +148,7 @@ void process_memory_access(unsigned addr, char rw) {
     }
 }
 
-//Encontra uma página na memória
+// Encontra uma página na memória
 int find_page_in_memory(int page_number) {
     for (unsigned i = 0; i < num_frames; i++) {
         if (physical_memory[i].valid && physical_memory[i].page_number == page_number) {
@@ -158,7 +158,7 @@ int find_page_in_memory(int page_number) {
     return -1;
 }
 
-//Lida com a falta de uma página na memória
+// Lida com a falta de uma página na memória
 void handle_page_fault(int page_number, char rw) {
     int victim_frame = select_victim_frame();
 
@@ -179,7 +179,7 @@ void handle_page_fault(int page_number, char rw) {
     page_table[page_number].last_access_time = access_count;
 }
 
-//Algoritmos de seleção de página a ser retirada da memória
+// Algoritmos de seleção de página a ser retirada da memória
 int select_victim_frame() {
 
     for (unsigned i = 0; i < num_frames; i++) {
