@@ -73,15 +73,10 @@ void initialize_page_table() {
     physical_memory = (Frame *)calloc(num_frames, sizeof(Frame));
 }
 
-// OLHAR OS BITS AQUI!!! Acho que está fazendo o mesmo
-
 PageTableEntry *get_or_create_page_entry(unsigned virtual_address) {
     // Calcular índices nos níveis
     unsigned level1_index = (virtual_address >> level2_bits) & ((1 << level1_bits) - 1);
     unsigned level2_index = virtual_address & ((1 << level2_bits) - 1);
-    //printf("Address: %d\n",virtual_address);
-    // printf("level1_index: %d\n", level1_index);
-    // printf("level2_index: %d\n", level2_index);
 
     // Acessar/Inicializar nível 2
     if (level1_table->entries[level1_index] == NULL) {
@@ -132,7 +127,7 @@ int choose_frame_to_replace() {
     return 0;
 }
 
-void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
+void handle_page_fault(PageTableEntry *entry, unsigned virtual_address, char rw) {
     // Escolher quadro para substituir
     int frame_to_replace = choose_frame_to_replace();
 
@@ -148,11 +143,11 @@ void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
 
     // Atualizar tabela invertida
     physical_memory[frame_to_replace].page_number = virtual_address;
-    //printf("Page number: %d\n", virtual_address);
+    
     physical_memory[frame_to_replace].valid = 1;
     physical_memory[frame_to_replace].modified = 0;
-    physical_memory[frame_to_replace].referenced = 1;
-    physical_memory[frame_to_replace].last_access = current_time;
+    // physical_memory[frame_to_replace].referenced = 1;
+    // physical_memory[frame_to_replace].last_access = current_time;
 
     // Atualizar entrada da tabela de páginas
     entry->frame = frame_to_replace;
@@ -190,18 +185,48 @@ void process_memory_access(FILE *file) {
         if (!entry->valid) {
             // Page fault
             page_faults++;
-            handle_page_fault(entry, address);
-        }
+            handle_page_fault(entry, address, access_type);
+        } else {
 
         // Atualizar bits de controle
         Frame *frame = &physical_memory[entry->frame];
         frame->referenced = 1;
         frame->last_access = current_time;
+
+        }
+        Frame *frame = &physical_memory[entry->frame];
         if (access_type == WRITE) {
             frame->modified = 1;
         }
     }
 }
+
+void calculate_table_size() {
+    unsigned total_entries_used = 0; // Contador para entradas usadas
+    unsigned total_level2_entries_used = 0; // Contador para entradas no nível 2
+
+    for (unsigned i = 0; i < level1_table->size; i++) {
+        if (level1_table->entries[i] != NULL) {
+            total_entries_used++;
+
+            // Contar as entradas usadas no nível 2
+            PageTableEntry *level2_entries = level1_table->entries[i];
+            unsigned level2_count = 0;
+
+            for (unsigned j = 0; j < (1 << level2_bits); j++) {
+                if (level2_entries[j].valid) {
+                    level2_count++;
+                }
+            }
+            if (level2_count > 0)
+            total_level2_entries_used += 1;
+
+        }
+    }
+
+    printf("Memória gasta = %d KB\n", 8 * (level1_table->size + (1 << level2_bits) * (total_level2_entries_used)) / 1024);
+}
+
 
 // Função principal
 int main(int argc, char *argv[]) {
@@ -234,14 +259,16 @@ int main(int argc, char *argv[]) {
     fclose(file);
 
     // Relatório final
-    printf("Executando o simulador...\n");
-    printf("Arquivo de entrada: %s\n", log_file);
-    printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
-    printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
-    printf("Tecnica de reposicao: %s\n", replacement_policy);
+
+    calculate_table_size();
+    // printf("Executando o simulador...\n");
+    // printf("Arquivo de entrada: %s\n", log_file);
+    // printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
+    // printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
+    // printf("Tecnica de reposicao: %s\n", replacement_policy);
     printf("Paginas lidas: %lu\n", page_faults);
     printf("Paginas escritas: %u\n", pages_written);
-    printf("Total de acessos à memória: %lu\n", total_accesses);
+    // printf("Total de acessos à memória: %lu\n", total_accesses);
 
     return 0;
 }

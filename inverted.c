@@ -9,6 +9,7 @@ typedef struct {
     int dirty;             // Bit para indicar se a página foi alterada (1 = suja, 0 = limpa)
     int referenced;        // Bit para indicar se a página foi referenciada recentemente
     unsigned last_access;  // Tempo do último acesso (para LRU)
+    int valid;
 } Frame;
 
 // Variáveis globais
@@ -73,6 +74,7 @@ void init_simulation() {
         inverted_table[i].dirty = 0;
         inverted_table[i].referenced = 0;
         inverted_table[i].last_access = 0;
+        inverted_table[i].valid = 0;
     }
 }
 
@@ -101,14 +103,15 @@ void process_memory_access(FILE *file) {
                 dirty_pages_written++;
             }
 
-            // Carregar nova página
             inverted_table[frame].virtual_page = virtual_page;
             inverted_table[frame].dirty = 0;
-        }
+        } else {
 
-        // Atualizar bits de controle
         inverted_table[frame].referenced = 1;
         inverted_table[frame].last_access = access_count;
+        
+        }
+
         if (rw == 'W') {
             inverted_table[frame].dirty = 1;
         }
@@ -121,14 +124,14 @@ int find_page(unsigned virtual_page) {
             return i;
         }
     }
-    return -1; // Página não encontrada
+    return -1;
 }
 
 int choose_frame_to_replace() {
 
     for (unsigned i = 0; i < num_frames; i++) {
         if (inverted_table[i].virtual_page == -1) {
-            return i; // Retornar o índice do quadro vazio
+            return i;
         }
     }
 
@@ -143,6 +146,7 @@ int choose_frame_to_replace() {
             }
         }
         return lru_frame;
+
     } else if (strcmp(replacement_algo, "fifo") == 0) {
 
         static int next_frame = 0;
@@ -151,18 +155,19 @@ int choose_frame_to_replace() {
         return victim;
 
     } else if (strcmp(replacement_algo, "random") == 0) {
+
         return random() % num_frames;
+
     } else if (strcmp(replacement_algo, "2a") == 0) { 
-        static int pointer = 0; // Ponteiro circular
+
+        static int pointer = 0;
         while (1) {
             int victim = pointer;
             pointer = (pointer + 1) % num_frames;
 
-            // Verificar o bit de referência
             if (inverted_table[victim].referenced == 0) {
-                return victim; // Página sem segunda chance, substitua
+                return victim; 
             } else {
-                // Dar segunda chance e resetar o bit de referência
                 inverted_table[victim].referenced = 0;
             }
         }
@@ -174,12 +179,14 @@ int choose_frame_to_replace() {
 }
 
 void print_report(const char *input_file) {
-    printf("Executando o simulador...\n");
-    printf("Arquivo de entrada: %s\n", input_file);
-    printf("Tamanho da memoria: %u KB\n", mem_size / 1024);
-    printf("Tamanho das paginas: %u KB\n", page_size / 1024);
-    printf("Tecnica de reposicao: %s\n", replacement_algo);
+
+    printf("Memória gasta = %.2f KB\n", (double)(num_frames) / 128.0);
+    // printf("Executando o simulador...\n");
+    // printf("Arquivo de entrada: %s\n", input_file);
+    // printf("Tamanho da memoria: %u KB\n", mem_size / 1024);
+    // printf("Tamanho das paginas: %u KB\n", page_size / 1024);
+    // printf("Tecnica de reposicao: %s\n", replacement_algo);
     printf("Paginas lidas: %u\n", page_faults);
     printf("Paginas escritas: %u\n", dirty_pages_written);
-    printf("Total de acessos à memória: %lu\n", access_count);
+    // printf("Total de acessos à memória: %lu\n", access_count);
 }

@@ -15,7 +15,7 @@ typedef struct {
     int frame_number;
     int valid;
     int modified;
-    unsigned long last_access_time; // Para LRU
+    unsigned long last_access_time;
 } PageTableEntry;
 
 typedef struct {
@@ -23,12 +23,13 @@ typedef struct {
     int page_number;
     int valid;
     int modified;
+    int reference;
 } Frame;
 
 // Variáveis globais
 unsigned page_size, memory_size;
 unsigned num_frames;
-unsigned s; // Quantidade de bits para deslocamento
+unsigned s;
 Frame *physical_memory;
 PageTableEntry *page_table;
 char replacement_policy[10];
@@ -53,13 +54,10 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Parse dos argumentos
     parse_arguments(argc, argv);
 
-    // Inicialização
     initialize_simulator();
 
-    // Leitura do arquivo de entrada
     FILE *input_file = fopen(argv[2], "r");
     if (!input_file) {
         perror("Erro ao abrir o arquivo de entrada");
@@ -73,16 +71,12 @@ int main(int argc, char *argv[]) {
     }
     fclose(input_file);
 
-    // Relatório final
     print_report(argv[2]);
-
-    // Liberar memória -  ESTÁ COM VAZAMENTO!!
-    //free(physical_memory);
-    //free(page_table);
 
     return 0;
 }
 
+// Lê os argumentos da entrada e verifica-os
 void parse_arguments(int argc, char *argv[]) {
 
     strcpy(replacement_policy, argv[1]);
@@ -95,11 +89,11 @@ void parse_arguments(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
 }
 
-    page_size = atoi(argv[3]) * 1024; // Converter KB para bytes
+    page_size = atoi(argv[3]) * 1024;
     memory_size = atoi(argv[4]) * 1024;
     num_frames = memory_size / page_size;
 
-    // Calcular o deslocamento s
+    // Calcular o deslocamento s - offset
     unsigned tmp = page_size;
     s = 0;
     while (tmp > 1) {
@@ -108,10 +102,11 @@ void parse_arguments(int argc, char *argv[]) {
     }
 }
 
+// Inicializar a memória física e tabela de páginas
 void initialize_simulator() {
 
     srandom((unsigned)time(NULL));
-    // Inicializar a memória física e tabela de páginas
+
     physical_memory = (Frame *)malloc(num_frames * sizeof(Frame));
     page_table = (PageTableEntry *)malloc(MAX_PAGE_TABLE_SIZE * sizeof(PageTableEntry));
 
@@ -120,11 +115,11 @@ void initialize_simulator() {
         exit(EXIT_FAILURE);
     }
 
-    // Inicializar todas as entradas como inválidas
     for (unsigned i = 0; i < num_frames; i++) {
         physical_memory[i].valid = FALSE;
         physical_memory[i].modified = FALSE;
         physical_memory[i].page_number = -1;
+        physical_memory[i].reference = 0;
     }
 
     for (unsigned i = 0; i < MAX_PAGE_TABLE_SIZE; i++) {
@@ -132,6 +127,7 @@ void initialize_simulator() {
     }
 }
 
+//Simula a execução de um acesso à memória com uma dada função (leitura ou escrita)
 void process_memory_access(unsigned addr, char rw) {
 
     int page_number = addr >> s;
@@ -139,19 +135,20 @@ void process_memory_access(unsigned addr, char rw) {
     int frame_index = find_page_in_memory(page_number);
 
     if (frame_index == -1) {
-        // Page fault
         page_faults++;
         handle_page_fault(page_number, rw);
     } else {
-        // Atualizar bits da página na memória
+
         physical_memory[frame_index].valid = TRUE;
+        physical_memory[frame_index].reference = 1;
         if (rw == 'W') {
             physical_memory[frame_index].modified = TRUE;
         }
-        page_table[page_number].last_access_time = access_count; // Para LRU
+        page_table[page_number].last_access_time = access_count;
     }
 }
 
+//Encontra uma página na memória
 int find_page_in_memory(int page_number) {
     for (unsigned i = 0; i < num_frames; i++) {
         if (physical_memory[i].valid && physical_memory[i].page_number == page_number) {
@@ -161,6 +158,7 @@ int find_page_in_memory(int page_number) {
     return -1;
 }
 
+//Lida com a falta de uma página na memória
 void handle_page_fault(int page_number, char rw) {
     int victim_frame = select_victim_frame();
 
@@ -172,7 +170,6 @@ void handle_page_fault(int page_number, char rw) {
         dirty_pages_written++;
     }
 
-    // Substituir a página no quadro
     physical_memory[victim_frame].page_number = page_number;
     physical_memory[victim_frame].valid = TRUE;
     physical_memory[victim_frame].modified = (rw == 'W');
@@ -182,28 +179,30 @@ void handle_page_fault(int page_number, char rw) {
     page_table[page_number].last_access_time = access_count;
 }
 
+//Algoritmos de seleção de página a ser retirada da memória
 int select_victim_frame() {
 
     for (unsigned i = 0; i < num_frames; i++) {
         if (!physical_memory[i].valid) {
-            return i; // Retorna imediatamente o primeiro quadro livre encontrado.
+            return i;
         }
     }
 
     if (strcmp(replacement_policy, "random") == 0) {
         return random() % num_frames;
+
     } else if (strcmp(replacement_policy, "fifo") == 0) {
         static int next_frame = 0;
         int victim = next_frame;
         next_frame = (next_frame + 1) % num_frames;
         return victim;
+        
     } else if (strcmp(replacement_policy, "lru") == 0) {
-        unsigned long oldest_time = ~0UL; // Maior valor possível para comparar corretamente.
+        unsigned long oldest_time = ~0UL;
         int victim = -1;
 
-        // Itera sobre todos os quadros para encontrar o menos recentemente usado.
         for (unsigned i = 0; i < num_frames; i++) {
-            if (physical_memory[i].valid) { // Apenas considera quadros válidos.
+            if (physical_memory[i].valid) {
                 unsigned page_number = physical_memory[i].page_number;
                 unsigned long last_access = page_table[page_number].last_access_time;
 
@@ -217,26 +216,24 @@ int select_victim_frame() {
         return victim;
         
     } else if (strcmp(replacement_policy, "2a") == 0) {
-    static int pointer = 0; // Ponteiro circular
+    static int pointer = 0;
     while (TRUE) {
         int victim = pointer;
         pointer = (pointer + 1) % num_frames;
 
-        // Verificar se tem segunda chance
-        if (page_table[physical_memory[victim].page_number].last_access_time < access_count) {
-            // Não tem segunda chance, selecionar
+        if (physical_memory[victim].reference == 0) {
             return victim;
         } else {
-            // Dar segunda chance e resetar o bit
-            page_table[physical_memory[victim].page_number].last_access_time = 0;
+            physical_memory[victim].reference = 0;
         }
     }
 }
-    // Implementar outros algoritmos aqui (2a chance, etc.)
     return 0;
 }
 
 void print_report(const char *input_file) {
+
+    //printf("Memória gasta = %d KB\n", MAX_PAGE_TABLE_SIZE / 128);
     printf("Executando o simulador...\n");
     printf("Arquivo de entrada: %s\n", input_file);
     printf("Tamanho da memoria: %u KB\n", memory_size / 1024);

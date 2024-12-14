@@ -155,8 +155,8 @@ void handle_page_fault(PageTableEntry *entry, unsigned virtual_address) {
     physical_memory[frame_to_replace].page_number = virtual_address;
     physical_memory[frame_to_replace].valid = 1;
     physical_memory[frame_to_replace].modified = 0;
-    physical_memory[frame_to_replace].referenced = 1;
-    physical_memory[frame_to_replace].last_access = current_time;
+    // physical_memory[frame_to_replace].referenced = 1;
+    // physical_memory[frame_to_replace].last_access = current_time;
 
     // Atualizar entrada da tabela de páginas
     entry->frame = frame_to_replace;
@@ -194,17 +194,60 @@ void process_memory_access(FILE *file) {
             // Page fault
             page_faults++;
             handle_page_fault(entry, address);
+        } else {
+
+        Frame *frame = &physical_memory[entry->frame];
+        frame->referenced = 1;
+        frame->last_access = current_time;
         }
 
         // Atualizar bits de controle
         Frame *frame = &physical_memory[entry->frame];
-        frame->referenced = 1;
-        frame->last_access = current_time;
         if (access_type == WRITE) {
             frame->modified = 1;
         }
     }
 }
+
+void calculate_table_size() {
+    unsigned total_entries_level1_used = 0;
+    unsigned total_entries_level2_used = 0;
+    unsigned total_entries_level3_used = 0;
+
+    for (unsigned i = 0; i < level1_table->size; i++) {
+        if (level1_table->entries[i] != NULL) {
+            total_entries_level1_used++;
+
+            PageTableLevel *level2_table = (PageTableLevel *)level1_table->entries[i];
+            for (unsigned j = 0; j < level2_table->size; j++) {
+                if (level2_table->entries[j] != NULL) {
+                    total_entries_level2_used++;
+
+                    PageTableEntry *level3_table = (PageTableEntry *)level2_table->entries[j];
+                    unsigned level3_count = 0;
+                    for (unsigned k = 0; k < (1 << level3_bits); k++) {
+                        if (level3_table[k].valid) {
+                            level3_count++;
+                        }
+                    }
+
+                    if (level3_count > 0) {
+                        total_entries_level3_used++;
+                    }
+                }
+            }
+        }
+    }
+
+    unsigned memory_used_kb = 8 * (
+        level1_table->size +
+        total_entries_level2_used * (1 << level2_bits) +
+        total_entries_level3_used * (1 << level3_bits)
+    ) / 1024;
+
+    printf("Memória gasta = %d KB\n", memory_used_kb);
+}
+
 
 int main(int argc, char *argv[]) {
     if (argc != 5) {
@@ -234,16 +277,16 @@ int main(int argc, char *argv[]) {
 
     process_memory_access(file);
     fclose(file);
-
+    calculate_table_size();
     // Relatório final
-    printf("Executando o simulador...\n");
-    printf("Arquivo de entrada: %s\n", log_file);
-    printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
-    printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
-    printf("Tecnica de reposicao: %s\n", replacement_policy);
+    // printf("Executando o simulador...\n");
+    // printf("Arquivo de entrada: %s\n", log_file);
+    // printf("Tamanho da memoria: %u KB\n", memory_size_kb / 1024);
+    // printf("Tamanho das paginas: %u KB\n", page_size_kb / 1024);
+    // printf("Tecnica de reposicao: %s\n", replacement_policy);
     printf("Paginas lidas: %lu\n", page_faults);
     printf("Paginas escritas: %lu\n", pages_written);
-    printf("Total de acessos à memória: %lu\n", total_accesses);
+    // printf("Total de acessos à memória: %lu\n", total_accesses);
 
     return 0;
 }
